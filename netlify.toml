@@ -13,12 +13,11 @@
 
 [functions]
   node_bundler = "esbuild"
+  external_node_modules = ["stripe"]  # 👈 ESTA LÍNEA ES CLAVE
 
-# Configuración para producción
 [context.production]
   command = "npm run build"
 
-# Headers de seguridad
 [[headers]]
   for = "/*"
   [headers.values]
