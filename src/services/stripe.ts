@@ -1,18 +1,18 @@
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 
-/*  ────── Cargar Stripe solo una vez ────── */
+/* Cargar Stripe solo una vez */
 let stripePromise: Promise<Stripe | null> | null = null;
 const getStripe = () => {
   if (!stripePromise) {
     stripePromise = loadStripe(
-      import.meta.env.VITE_STRIPE_PUBLIC_KEY as string // ← lee la env de Netlify
+      import.meta.env.VITE_STRIPE_PUBLIC_KEY as string // ← clave pública desde Netlify
     );
   }
   return stripePromise;
 };
 
 export const stripeService = {
-  /* Crear PaymentIntent en tu función backend */
+  /* ───────── Crear PaymentIntent en tu función backend ───────── */
   createPaymentIntent: async (
     amount: number,
     planType: string,
@@ -32,18 +32,31 @@ export const stripeService = {
     return res.json(); // { clientSecret, paymentIntentId }
   },
 
-  /* Crear elementos y devolverlos listos para montar */
+  /* ───────── Crear Elements y devolver Payment Element ───────── */
   createPaymentElements: async (clientSecret: string) => {
     const stripe = await getStripe();
     if (!stripe) throw new Error('Stripe no se cargó');
 
-    const elements = stripe.elements({ clientSecret });
-    const paymentElement = elements.create('payment');
+    /* Configuración general de Elements */
+    const elements = stripe.elements({
+      clientSecret,
+      appearance: {},
+      loader: 'auto',
+    });
+
+    /* SOLO tarjeta; ocultamos Link y otros métodos */
+    const paymentElement = elements.create('payment', {
+      layout: 'tabs',
+      business: { name: 'LoQueCallas' },
+      paymentMethodOrder: ['card'],          // ← Filtro: sólo “card”
+    });
 
     return { stripe, elements, paymentElement };
   },
 
-  /* Confirmar el pago en el frontend */
+  /* ───────── Confirmar el pago desde el frontend (opcional) ─────────
+     (Ya no se usa en el nuevo componente, pero lo dejamos por si lo
+     necesitas en otra parte del proyecto.)                                        */
   confirmPayment: async (
     clientSecret: string,
     receiptEmail: string,
@@ -64,7 +77,7 @@ export const stripeService = {
     });
   },
 
-  /* Verificar en tu backend que el PaymentIntent quedó “succeeded” */
+  /* ───────── Verificar en backend que el pago quedó “succeeded” ───────── */
   verifyPayment: async (paymentIntentId: string) => {
     const res = await fetch('/api/confirm-payment', {
       method: 'POST',
