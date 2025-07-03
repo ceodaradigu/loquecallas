@@ -15,18 +15,15 @@ exports.handler = async (event) => {
     const { amount, planType, customerEmail, formData } = JSON.parse(event.body);
 
     if (!amount || !planType || !customerEmail || !formData)
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Faltan datos requeridos' }),
-      };
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Datos faltantes' }) };
 
+    /* Aceptamos tarjeta y Revolut Pay */
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100),
       currency: 'eur',
-      payment_method_types: ['card'],        // ← sólo tarjeta
+      payment_method_types: ['card', 'revolut_pay'],
       receipt_email: customerEmail,
-      description: `LoQueCallas - ${planType === 'premium' ? 'Carta Premium' : 'Carta Básica'}`,
+      description: `LoQueCallas – ${planType === 'premium' ? 'Carta Premium' : 'Carta Básica'}`,
       metadata: {
         plan_type: planType,
         para_quien: formData.paraQuien || '',
@@ -47,10 +44,6 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: err.message }),
-    };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
   }
 };
