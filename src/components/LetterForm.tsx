@@ -64,8 +64,12 @@ const LetterForm: React.FC<LetterFormProps> = ({ selectedPlan, onPaymentSuccess 
     
     if (!validateForm()) return;
     
-    // Mostrar formulario de pago
-    setShowPayment(true);
+    // Redirigir directamente a Stripe según el plan
+    if (selectedPlan.type === 'basica') {
+      window.location.href = 'https://buy.stripe.com/test_eVq9AMb7Oalc5eY69E8EM00';
+    } else if (selectedPlan.type === 'premium') {
+      window.location.href = 'https://buy.stripe.com/test_28E9AM7VC3WO6j2cy28EM01';
+    }
   };
 
   const handlePaymentSuccess = async (paymentData: any) => {
