@@ -7,41 +7,34 @@ exports.handler = async (event) => {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 
-  /* Pre-flight */
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
-  if (event.httpMethod !== 'POST')
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
+  }
+
+  if (event.httpMethod !== 'POST') {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
 
   try {
-    const { amount, planType, customerEmail = '', formData = {} } = JSON.parse(event.body);
+    const { amount, customerEmail } = JSON.parse(event.body);
 
-    if (!amount || !planType)
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Datos faltantes' }) };
-
-    /* Datos base del PaymentIntent */
-    const intentData = {
-      amount: Math.round(amount * 100),
-      currency: 'eur',
-      payment_method_types: ['card'],              // solo tarjeta
-      description: `LoQueCallas – ${planType === 'premium' ? 'Carta Premium' : 'Carta Básica'}`,
-      metadata: {
-        plan_type: planType,
-        para_quien: formData.paraQuien || '',
-        ocasion: formData.ocasion || '',
-        relacion: formData.relacion || '',
-        emociones: Array.isArray(formData.emociones) ? formData.emociones.join(', ') : '',
-        tono: formData.tono || '',
-        tu_nombre: formData.tuNombre || '',
-      },
-    };
-
-    /* Añadir email SOLO si existe y parece válido */
-    if (customerEmail && /\S+@\S+\.\S+/.test(customerEmail)) {
-      intentData.receipt_email = customerEmail;
-      intentData.metadata.customer_email = customerEmail;
+    if (!amount || !customerEmail) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'amount y customerEmail son requeridos' }),
+      };
     }
 
-    const paymentIntent = await stripe.paymentIntents.create(intentData);
+    // ⚠️  Desactivamos métodos automáticos y fijamos SOLO tarjeta
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100),
+      currency: 'eur',
+      customer_email: customerEmail,
+      payment_method_types: ['card'],
+      automatic_payment_methods: { enabled: false },
+      description: 'LoQueCallas – Carta',
+    });
 
     return {
       statusCode: 200,
@@ -52,6 +45,11 @@ exports.handler = async (event) => {
       }),
     };
   } catch (err) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    console.error(err);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ error: 'Stripe error', details: err.message }),
+    };
   }
 };
