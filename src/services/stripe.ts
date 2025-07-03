@@ -1,90 +1,81 @@
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 
-let stripePromise: any = null;
+/*  ────── Cargar Stripe solo una vez ────── */
+let stripePromise: Promise<Stripe | null> | null = null;
+const getStripe = () => {
+  if (!stripePromise) {
+    stripePromise = loadStripe(
+      import.meta.env.VITE_STRIPE_PUBLIC_KEY as string // ← lee la env de Netlify
+    );
+  }
+  return stripePromise;
+};
 
 export const stripeService = {
+  /* Crear PaymentIntent en tu función backend */
   createPaymentIntent: async (
     amount: number,
     planType: string,
     customerEmail: string,
     formData: any
   ) => {
-    const response = await fetch('/api/create-payment-intent', {
+    const res = await fetch('/api/create-payment-intent', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount,
-        planType,
-        customerEmail,
-        formData,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, planType, customerEmail, formData }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Error creando el intento de pago');
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Error creando el intento de pago');
     }
-
-    return await response.json();
+    return res.json(); // { clientSecret, paymentIntentId }
   },
 
+  /* Crear elementos y devolverlos listos para montar */
   createPaymentElements: async (clientSecret: string) => {
-    if (!stripePromise) {
-      stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY as string);
-    }
-
-    const stripe = await stripePromise;
+    const stripe = await getStripe();
+    if (!stripe) throw new Error('Stripe no se cargó');
 
     const elements = stripe.elements({ clientSecret });
-
     const paymentElement = elements.create('payment');
 
     return { stripe, elements, paymentElement };
   },
 
+  /* Confirmar el pago en el frontend */
   confirmPayment: async (
     clientSecret: string,
     receiptEmail: string,
     cardholderName: string
   ) => {
-    if (!stripePromise) {
-      stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY as string);
-    }
+    const stripe = await getStripe();
+    if (!stripe) throw new Error('Stripe no se cargó');
 
-    const stripe = await stripePromise;
-
-    const result = await stripe.confirmPayment({
+    return stripe.confirmPayment({
       elements: stripe.elements({ clientSecret }),
       confirmParams: {
         receipt_email: receiptEmail,
         payment_method_data: {
-          billing_details: {
-            name: cardholderName,
-          },
+          billing_details: { name: cardholderName },
         },
       },
       redirect: 'if_required',
     });
-
-    return result;
   },
 
+  /* Verificar en tu backend que el PaymentIntent quedó “succeeded” */
   verifyPayment: async (paymentIntentId: string) => {
-    const response = await fetch('/api/confirm-payment', {
+    const res = await fetch('/api/confirm-payment', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ paymentIntentId }),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Error verificando el pago');
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Error verificando el pago');
     }
-
-    return await response.json();
+    return res.json();
   },
 };
