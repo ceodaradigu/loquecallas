@@ -1,57 +1,55 @@
-import { loadStripe, Stripe } from '@stripe/stripe-js';
+/* src/services/stripe.ts  — versión tarjeta-solo */
+import { loadStripe, Stripe, StripeElements } from '@stripe/stripe-js';
 
-let stripePromise: Promise<Stripe | null> | null = null;
-const getStripe = () => {
-  if (!stripePromise) {
-    stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY as string);
-  }
-  return stripePromise;
-};
+let stripePromise: Promise<Stripe | null>;
 
 export const stripeService = {
-  /* ── Crea PaymentIntent en tu función backend ── */
-  createPaymentIntent: async (
-    amount: number,
-    planType: string,
-    customerEmail: string,
-    formData: any
-  ) => {
-    const res = await fetch('/api/create-payment-intent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount, planType, customerEmail, formData }),
-    });
-    if (!res.ok) throw new Error((await res.json()).error);
-    return res.json();              // { clientSecret, paymentIntentId }
+  /* 1 · Cargar Stripe JS */
+  getStripe() {
+    if (!stripePromise) {
+      stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+    }
+    return stripePromise;
   },
 
-  /* ── Crea Elements y PaymentElement SOLO con tarjeta ── */
-  createPaymentElements: async (clientSecret: string) => {
-    const stripe = await getStripe();
-    if (!stripe) throw new Error('Stripe no se cargó');
-
-    /* Elements base */
-    const elements = stripe.elements({ clientSecret });
-
-    /* Opciones del PaymentElement:
-       - solo tarjeta en order
-       - Link desactivado por completo                       */
-    const paymentElement = elements.create('payment', {
-      paymentMethodOrder: ['card'],
-      wallets: { link: 'never' },         // ← Link desactivado
+  /* 2 · Crear PaymentIntent  ─────────────────────────── */
+  async createPaymentIntent(amount: number, customerEmail: string) {
+    const res = await fetch('/.netlify/functions/create-payment-intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount, customerEmail }),
     });
+
+    if (!res.ok) {
+      const { error } = await res.json();
+      throw new Error(error || 'Error server');
+    }
+    return res.json(); // { clientSecret, paymentIntentId }
+  },
+
+  /* 3 · Crear Elements y Payment Element ─────────────── */
+  async createPaymentElements(
+    clientSecret: string,
+    elementOpts = {
+      paymentMethodOrder: ['card'],
+      wallets: {
+        applePay: 'never',
+        googlePay: 'never',
+        link: 'never',
+        revolutPay: 'never',
+      },
+    },
+  ): Promise<{
+    stripe: Stripe;
+    elements: StripeElements;
+    paymentElement: any;
+  }> {
+    const stripe = await this.getStripe();
+    if (!stripe) throw new Error('Stripe.js failed to load');
+
+    const elements = stripe.elements({ clientSecret });
+    const paymentElement = elements.create('payment', elementOpts);
 
     return { stripe, elements, paymentElement };
-  },
-
-  /* ── Verifica en backend que quedó succeeded ── */
-  verifyPayment: async (paymentIntentId: string) => {
-    const res = await fetch('/api/confirm-payment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paymentIntentId }),
-    });
-    if (!res.ok) throw new Error((await res.json()).error);
-    return res.json();
   },
 };
