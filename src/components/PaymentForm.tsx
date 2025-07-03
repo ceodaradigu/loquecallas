@@ -16,6 +16,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
   onPaymentSuccess,
   onCancel,
 }) => {
+  /* Estados básicos */
   const [stripe, setStripe] = useState<any>(null);
   const [elements, setElements] = useState<any>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
@@ -23,7 +24,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /* ─────────────────── 1. Crear PaymentIntent ─────────────────── */
+  /* ───────── 1. Crear PaymentIntent ───────── */
   useEffect(() => {
     const createIntent = async () => {
       try {
@@ -45,22 +46,18 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ───────── 2. Cuando exista clientSecret, monta Element ───────── */
+  /* ───────── 2. Montar Payment Element ───────── */
   useEffect(() => {
     if (!clientSecret) return;
 
-    let paymentElement: any; // referencia local
+    let paymentElement: any;
+
     const mountElement = async () => {
       try {
-        const {
-          stripe,
-          elements,
-          paymentElement: pe,
-        } = await stripeService.createPaymentElements(clientSecret);
-
-        setStripe(stripe);
-        setElements(elements);
-        paymentElement = pe;
+        const obj = await stripeService.createPaymentElements(clientSecret);
+        setStripe(obj.stripe);
+        setElements(obj.elements);
+        paymentElement = obj.paymentElement;
         paymentElement.mount('#payment-element');
       } catch (err: any) {
         setError(err.message || 'Error cargando formulario de pago');
@@ -68,13 +65,13 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
     };
     mountElement();
 
-    // Limpieza: desmontar una sola vez
+    /* Limpieza */
     return () => {
       if (paymentElement) paymentElement.unmount();
     };
   }, [clientSecret]);
 
-  /* ──────────────── 3. Confirmar el pago ──────────────── */
+  /* ───────── 3. Confirmar pago ───────── */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!stripe || !elements || !clientSecret) return;
@@ -83,20 +80,26 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
     setError(null);
 
     try {
-      const { paymentIntent, error } = await stripeService.confirmPayment(
-        clientSecret,
-        formData.email,
-        formData.tuNombre
-      );
-      if (error) throw error;
+      /* Usamos el MISMO elements ya montado */
+      const { error: stripeErr, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          receipt_email: formData.email,
+          payment_method_data: {
+            billing_details: { name: formData.tuNombre },
+          },
+        },
+        redirect: 'if_required',
+      });
 
-      if (paymentIntent.status === 'succeeded') {
-        const verification = await stripeService.verifyPayment(paymentIntent.id);
-        if (verification.success) onPaymentSuccess(verification);
-        else throw new Error('Error verificando el pago');
-      } else {
+      if (stripeErr) throw stripeErr;
+      if (paymentIntent?.status !== 'succeeded')
         throw new Error('El pago no se completó');
-      }
+
+      /* Verificación backend */
+      const verification = await stripeService.verifyPayment(paymentIntent.id);
+      if (verification.success) onPaymentSuccess(verification);
+      else throw new Error('Error verificando el pago');
     } catch (err: any) {
       setError(err.message || 'Error procesando el pago');
     } finally {
@@ -104,7 +107,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
     }
   };
 
-  /* ──────────────────── Render ──────────────────── */
+  /* ───────── UI ───────── */
   return (
     <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md mx-auto">
       <div className="text-center mb-6">
@@ -162,7 +165,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
           disabled={isLoading || !stripe}
           className="w-full bg-gradient-to-r from-rose-500 to-amber-400 text-white py-4 px-6 rounded-xl text-lg font-bold disabled:opacity-50"
         >
-          {isLoading ? 'Procesando...' : `Pagar ${selectedPlan.price}€`}
+          {isLoading ? 'Procesando…' : `Pagar ${selectedPlan.price}€`}
         </button>
 
         <button
