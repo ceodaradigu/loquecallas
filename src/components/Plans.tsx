@@ -38,12 +38,17 @@ const Plans: React.FC<PlansProps> = ({ onPlanSelect, selectedPlan }) => {
   ];
 
   const handlePlanSelect = (plan: Plan) => {
-    // Redirigir directamente a Stripe según el plan seleccionado
-    if (plan.type === 'basica') {
-      window.location.href = 'https://buy.stripe.com/test_eVq9AMb7Oalc5eY69E8EM00';
-    } else if (plan.type === 'premium') {
-      window.location.href = 'https://buy.stripe.com/test_28E9AM7VC3WO6j2cy28EM01';
-    }
+    onPlanSelect(plan);
+    // Scroll automático al formulario después de seleccionar plan
+    setTimeout(() => {
+      const formElement = document.getElementById('crear');
+      if (formElement) {
+        formElement.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    }, 100);
   };
 
   return (
