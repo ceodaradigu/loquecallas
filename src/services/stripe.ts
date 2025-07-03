@@ -21,7 +21,7 @@ export const stripeService = {
       body: JSON.stringify({ amount, planType, customerEmail, formData }),
     });
     if (!res.ok) throw new Error((await res.json()).error);
-    return res.json(); // { clientSecret, paymentIntentId }
+    return res.json();                    // { clientSecret, paymentIntentId }
   },
 
   createPaymentElements: async (clientSecret: string) => {
@@ -30,9 +30,8 @@ export const stripeService = {
 
     const elements = stripe.elements({ clientSecret });
 
-    /* Orden: tarjeta primero, Revolut Pay segundo */
     const paymentElement = elements.create('payment', {
-      paymentMethodOrder: ['card', 'revolut_pay'],
+      paymentMethodOrder: ['card'],        // ← SOLO TARJETA
     });
 
     return { stripe, elements, paymentElement };
