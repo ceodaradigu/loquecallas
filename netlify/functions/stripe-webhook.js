@@ -1,7 +1,20 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
+// ✅ Configuración del Google Form (copiada de tu código frontend)
+const GOOGLE_FORM_BASE_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSco0xfmy5yVp0GXaSP7w3Jn2B3Le5TNih7mpDVGCbBXILiA2Q/viewform';
+
+const GOOGLE_FORM_ENTRIES = {
+  paraQuien: 'entry.1876306950',
+  ocasion: 'entry.1925524653',
+  relacion: 'entry.1780892610',
+  emociones: 'entry.1034540138',
+  detalles: 'entry.1155486927',
+  tono: 'entry.1244248194',
+  tuNombre: 'entry.1484056496',
+  email: 'entry.275195844'
+};
+
 exports.handler = async (event, context) => {
-  // Solo aceptar métodos POST
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -9,7 +22,6 @@ exports.handler = async (event, context) => {
     };
   }
 
-  // Verificar webhook signature (importante para seguridad)
   const signature = event.headers['stripe-signature'];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
   
@@ -29,30 +41,39 @@ exports.handler = async (event, context) => {
     };
   }
 
-  // Procesar solo eventos de pago exitoso
   if (stripeEvent.type === 'checkout.session.completed') {
     const session = stripeEvent.data.object;
     
     try {
       console.log('✅ Pago exitoso recibido:', session.id);
       
-      // Aquí extraeremos los datos del cliente desde los metadatos
       const customerEmail = session.customer_details.email;
-      const amountPaid = session.amount_total / 100; // Convertir de centavos a euros
+      const amountPaid = session.amount_total / 100;
       
-      // Determinar tipo de plan basado en el precio
-      const planType = amountPaid === 0.99 ? 'basica' : 'premium';
+      // Obtener datos del formulario desde metadatos
+      const formData = {
+        paraQuien: session.metadata.paraQuien,
+        ocasion: session.metadata.ocasion,
+        relacion: session.metadata.relacion,
+        emociones: session.metadata.emociones ? session.metadata.emociones.split(', ') : [],
+        detalles: session.metadata.detalles,
+        tono: session.metadata.tono,
+        tuNombre: session.metadata.tuNombre,
+        email: session.metadata.email,
+        planElegido: session.metadata.planElegido,
+        paymentIntentId: session.payment_intent,
+        amount: amountPaid.toFixed(2),
+        timestamp: new Date().toISOString()
+      };
       
-      console.log(`💰 Pago de ${amountPaid}€ para plan ${planType}`);
+      console.log(`💰 Pago de ${amountPaid}€ para plan ${formData.planElegido}`);
       console.log(`📧 Email del cliente: ${customerEmail}`);
+      console.log(`📝 Generando carta para: ${formData.paraQuien}`);
       
-      // Aquí irá la lógica para generar y enviar la carta
-      await generateAndSendLetter({
-        email: customerEmail,
-        planType: planType,
-        paymentId: session.id,
-        amount: amountPaid
-      });
+      // Enviar a Google Form (usando tu lógica original)
+      await submitToGoogleFormDirect(formData);
+      
+      console.log('✅ Carta enviada exitosamente a:', formData.email);
       
       return {
         statusCode: 200,
@@ -75,7 +96,6 @@ exports.handler = async (event, context) => {
     }
   }
 
-  // Para otros tipos de eventos de Stripe
   console.log(`ℹ️ Evento recibido pero no procesado: ${stripeEvent.type}`);
   
   return {
@@ -84,71 +104,45 @@ exports.handler = async (event, context) => {
   };
 };
 
-// Función para generar y enviar la carta
-async function generateAndSendLetter(paymentData) {
-  console.log('🎨 Generando carta para:', paymentData.email);
-  
-  // NOTA: Aquí falta conectar con los datos del formulario
-  // Por ahora, enviamos un email básico de confirmación
-  
-  const letterContent = generateBasicLetter(paymentData.planType);
-  
-  // Enviar email (necesitaremos configurar un servicio de email)
-  await sendEmail({
-    to: paymentData.email,
-    subject: `Tu carta personalizada LoQueCallas - Plan ${paymentData.planType}`,
-    content: letterContent,
-    paymentId: paymentData.paymentId
-  });
-  
-  console.log('✅ Carta enviada exitosamente a:', paymentData.email);
-}
+// ✅ Función adaptada de tu código frontend para el servidor
+async function submitToGoogleFormDirect(formData) {
+  try {
+    console.log('📝 Enviando datos directamente al Google Form:', formData.email);
+    
+    const formUrl = GOOGLE_FORM_BASE_URL.replace('/viewform', '/formResponse');
+    
+    // Crear parámetros URL para enviar
+    const params = new URLSearchParams();
+    
+    Object.entries(formData).forEach(([key, value]) => {
+      const entryId = GOOGLE_FORM_ENTRIES[key];
+      if (entryId && value !== undefined && value !== null) {
+        if (Array.isArray(value)) {
+          params.append(entryId, value.join(', '));
+        } else {
+          params.append(entryId, value.toString());
+        }
+        console.log(`✅ Enviando ${key} → ${entryId}: ${Array.isArray(value) ? value.join(', ') : value}`);
+      }
+    });
 
-// Función temporal para generar carta básica
-function generateBasicLetter(planType) {
-  if (planType === 'basica') {
-    return `
-Querido/a destinatario/a,
+    // Enviar datos usando fetch (Node.js)
+    const fetch = require('node-fetch');
+    const response = await fetch(formUrl, {
+      method: 'POST',
+      body: params,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }
+    });
 
-¡Gracias por elegir LoQueCallas! 
-
-Esta es tu carta personalizada del plan básico. Tu carta real se generará con todos los detalles que proporcionaste en el formulario.
-
-Con cariño,
-El equipo de LoQueCallas
-
----
-Plan: Carta Básica (0.99€)
-Entrega: Inmediata
-    `;
-  } else {
-    return `
-Querido/a destinatario/a,
-
-¡Gracias por elegir LoQueCallas Premium! 
-
-Esta es tu carta personalizada del plan premium. Tu carta real se generará con todos los detalles que proporcionaste en el formulario, con máxima personalización y lenguaje poético avanzado.
-
-Con cariño y dedicación,
-El equipo de LoQueCallas
-
----
-Plan: Carta Premium (3.99€)
-Entrega: Inmediata
-    `;
+    console.log('✅ Email simulado enviado exitosamente');
+    console.log('✅ Carta enviada exitosamente a:', formData.email);
+    
+    return true;
+    
+  } catch (error) {
+    console.error('❌ Error enviando datos a Google Form:', error);
+    throw error;
   }
-}
-
-// Función para enviar email (temporal - necesita configuración real)
-async function sendEmail(emailData) {
-  console.log('📧 Enviando email a:', emailData.to);
-  console.log('📝 Contenido:', emailData.content);
-  
-  // AQUÍ IRÁN LAS LLAMADAS REALES A UN SERVICIO DE EMAIL
-  // Por ejemplo: SendGrid, Resend, EmailJS, etc.
-  
-  // Por ahora solo logueamos
-  console.log('✅ Email simulado enviado exitosamente');
-  
-  return true;
 }
