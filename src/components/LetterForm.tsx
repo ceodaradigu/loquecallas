@@ -59,18 +59,40 @@ const LetterForm: React.FC<LetterFormProps> = ({ selectedPlan, onPaymentSuccess 
     return true;
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFormSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  if (!validateForm()) return;
+  
+  try {
+    // Llamar a nuestra función con los datos del formulario
+    const response = await fetch('/.netlify/functions/create-checkout-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        formData, 
+        planType: selectedPlan.type 
+      })
+    });
     
-    if (!validateForm()) return;
-    
-    // Redirigir directamente a Stripe según el plan
-    if (selectedPlan.type === 'basica') {
-      window.location.href = 'https://buy.stripe.com/14AfZhdo36B52vJcnA04800';
-    } else if (selectedPlan.type === 'premium') {
-      window.location.href = 'https://buy.stripe.com/cNibJ1fwb4sXc6jfzM04801';
+    if (!response.ok) {
+      throw new Error('Error en la respuesta del servidor');
     }
-  };
+    
+    const { url } = await response.json();
+    
+    if (url) {
+      window.location.href = url;
+    } else {
+      throw new Error('No se pudo crear la sesión de pago');
+    }
+  } catch (error) {
+    console.error('Error creando sesión de pago:', error);
+    alert('Error al procesar el pago. Por favor, inténtalo de nuevo.');
+  }
+};
 
   const handlePaymentSuccess = async (paymentData: any) => {
     setIsSubmitting(true);
